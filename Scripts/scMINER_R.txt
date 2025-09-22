@@ -131,14 +131,32 @@ saveRDS(activity.eset, file = "../Ovary_project/DATA/ovary_activity.eset")
 
 # Differential Activity Analyses
 
-da_res1 <- getDA(input_eset = activity.eset, group_by = "condition", use_method = "t.test")
+da_res2 <- getDA(input_eset = activity.eset, group_by = "condition", g1 = c("Cancer"), use_method = "t.test")
 
-top_drivers <- getTopFeatures(input_table = da_res1, number = 10, group_by = "g1_tag", sort_by = "log2FC", sort_decreasing = TRUE)
+## Top 20 with log2FC > 0 (up-regulated)
+top_up_20 <- getTopFeatures(
+  input_table     = subset(da_res1, log2FC > 0),
+  number          = 20,
+  group_by        = "g1_tag",
+  sort_by         = "log2FC",
+  sort_decreasing = TRUE
+)
+
+## Top 20 with log2FC < 0 (down-regulated)
+top_down_20 <- getTopFeatures(
+  input_table     = subset(da_res1, log2FC < 0),
+  number          = 20,
+  group_by        = "g1_tag",
+  sort_by         = "log2FC",
+  sort_decreasing = FALSE   # γιατί θέλουμε τα πιο αρνητικά log2FC
+)
 
 library(openxlsx)
 
-write.xlsx(
-  top_drivers,
-  file = "C:/Users/Nefeli Vakalopoulou/OneDrive/Υπολογιστής/Master thesis/Ovary_project/top_drivers.xlsx",
-  rowNames = FALSE
+write_xlsx(
+  list(
+    Top_Up_20   = top_up_20,
+    Top_Down_20 = top_down_20
+  ),
+  path = "top20_drivers.xlsx"
 )

@@ -1,0 +1,114 @@
+# Upload data
+from google.colab import files
+uploaded = files.upload()
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Volcano plot
+
+logfc_col = "log2FC"
+padj_col  = "FDR"     # adjusted p-value
+p_col     = "Pval"    # raw p-value (backup, αν δεν θες FDR)
+name_col  = "feature"
+
+import numpy as np
+import pandas as pd
+
+if padj_col in df.columns and df[padj_col].notna().any():
+    p = pd.to_numeric(df[padj_col], errors="coerce")
+    alpha = 0.05
+    sig_mask = p < alpha
+elif p_col in df.columns and df[p_col].notna().any():
+    p = pd.to_numeric(df[p_col], errors="coerce")
+    alpha = 0.05
+    sig_mask = p < alpha
+else:
+    p = pd.Series(np.nan, index=df.index)
+    sig_mask = pd.Series(True, index=df.index)
+    alpha = None
+
+y = -np.log10(p)
+y = np.where((~np.isfinite(y)) & (p == 0), 600.0, y)  # 0 → 600
+# (προαιρετικά) NaN/±∞ εκτός των 0 -> κάν’ τα NaN για να μη ζωγραφίζονται
+y = np.where(np.isfinite(y), y, np.nan)
+# Κόψε ό,τι ξεφεύγει πάνω από 600
+df["_neglog10p"] = np.clip(y, 0, 400)
+
+logfc = df[logfc_col].astype(float)
+has_sig = bool(sig_mask.any()) if isinstance(sig_mask, pd.Series) else False
+up = df[(logfc > 0) & sig_mask].copy() if has_sig else df[logfc > 0].copy()
+down = df[(logfc < 0) & sig_mask].copy() if has_sig else df[logfc < 0].copy()
+
+top_up_10 = up.sort_values(by=logfc_col, ascending=False).head(10)
+top_down_10 = down.sort_values(by=logfc_col, ascending=True).head(10)
+
+plt.figure(figsize=(7,6))
+plt.scatter(df[logfc_col], df["_neglog10p"], s=10, alpha=0.5)          # όλα τα σημεία
+plt.scatter(top_up_10[logfc_col], top_up_10["_neglog10p"], s=30)        # top up
+plt.scatter(top_down_10[logfc_col], top_down_10["_neglog10p"], s=30)    # top down
+
+lfc_thresh = 1.0
+if alpha is not None:
+    plt.axhline(-np.log10(0.05), linestyle="--", linewidth=1)
+plt.axvline(lfc_thresh, linestyle="--", linewidth=1)
+plt.axvline(-lfc_thresh, linestyle="--", linewidth=1)
+
+plt.xlabel(logfc_col)
+ylabel = "-log10(FDR)" if padj_col in df.columns and df[padj_col].notna().any() else "-log10(p-value)"
+plt.ylabel(ylabel)
+plt.title("Volcano plot: Top 10 up/down regulated drivers in cancer T cells")
+
+!pip -q install adjustText
+
+from adjustText import adjust_text
+import matplotlib.patheffects as pe
+
+plt.gcf().set_size_inches(9, 7)
+plt.margins(x=0.12, y=0.15)
+
+xmin, xmax = df[logfc_col].min(), df[logfc_col].max()
+plt.xlim(xmin - 0.3, xmax + 0.3)
+
+texts = []
+for _, r in top_up_10.iterrows():
+    texts.append(
+        plt.text(r[logfc_col], r["_neglog10p"], str(r[name_col]),
+                 fontsize=6, ha="left", va="bottom", zorder=3,
+                 path_effects=[pe.withStroke(linewidth=3, foreground="white"), pe.Normal()])
+    )
+for _, r in top_down_10.iterrows():
+    texts.append(
+        plt.text(r[logfc_col], r["_neglog10p"], str(r[name_col]),
+                 fontsize=6, ha="right", va="bottom", zorder=3,
+                 path_effects=[pe.withStroke(linewidth=3, foreground="white"), pe.Normal()])
+    )
+
+adjust_text(
+    texts,
+    x=df[logfc_col].to_numpy(),
+    y=df["_neglog10p"].to_numpy(),
+    expand_text=(1.2, 1.4),
+    expand_points=(1.2, 1.4),
+    force_text=(0.2, 0.4),
+    force_points=(0.2, 0.4),
+    arrowprops=dict(arrowstyle="-", lw=0.6),
+    lim=300
+)
+
+plt.tight_layout()
+plt.savefig("/content/volcano_da_res2.png", dpi=300)
+plt.show()
+
+cols_to_save = [name_col, logfc_col]
+if padj_col in df.columns: cols_to_save.append(padj_col)
+elif p_col in df.columns:  cols_to_save.append(p_col)
+
+top_up_10[cols_to_save].to_csv("/content/top_up_10.csv", index=False)
+top_down_10[cols_to_save].to_csv("/content/top_down_10.csv", index=False)
+
+print("content/volcano_da_res2.png, /content/top_up_10.csv, /content/top_down_10.csv")
+
+#Barplot
+

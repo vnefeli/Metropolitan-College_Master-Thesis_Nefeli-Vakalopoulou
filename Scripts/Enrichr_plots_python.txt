@@ -1,0 +1,277 @@
+# Upload data
+
+from google.colab import files
+import io, pandas as pd, numpy as np, matplotlib.pyplot as plt
+
+uploaded = files.upload()              
+fname = next(iter(uploaded))
+
+
+
+
+## Cell Marker 2024 up regulated drivers
+
+df = pd.read_csv(io.BytesIO(uploaded[fname]), sep="\t")
+
+num_cols = ["P-value","Adjusted P-value","Old P-value","Old Adjusted P-value","Odds Ratio","Combined Score"]
+for c in num_cols:
+    if c in df.columns:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
+import re, textwrap
+def genes_to_label(s, max_genes=8, wrap=28):
+    """Παίρνει string από τη στήλη Genes και επιστρέφει multiline label.
+       max_genes: πόσα πρώτα γονίδια να δείχνει (None = όλα)
+       wrap: πόσοι χαρακτήρες ανά γραμμή περίπου
+    """
+    if pd.isna(s):
+        return ""
+    genes = [t.strip() for t in re.split(r"[;,]\s*", str(s)) if t.strip()]
+    if max_genes is not None:
+        genes = genes[:max_genes]
+    txt = ", ".join(genes)
+    return textwrap.fill(txt, width=wrap)
+
+p_adj = df["Adjusted P-value"].replace(0, np.finfo(float).tiny)
+df["minus_log10_adjP"] = -np.log10(p_adj)
+
+N = 10
+top = df.sort_values(["Adjusted P-value", "Combined Score"], ascending=[True, False]).head(N).copy()
+top["Genes_label"] = top["Genes"].apply(lambda s: genes_to_label(s, max_genes=8, wrap=26))
+
+cmap = plt.cm.viridis
+norm = plt.Normalize(vmin=top["minus_log10_adjP"].min(), vmax=top["minus_log10_adjP"].max())
+colors = cmap(norm(top["minus_log10_adjP"]))
+
+fig, ax = plt.subplots(figsize=(12, max(6, 0.55*N)))
+
+x_vals = top["minus_log10_adjP"]
+bars = ax.barh(top["Term"], x_vals, color=colors)
+
+ax.invert_yaxis()
+ax.set_xlabel("-log10(Adjusted P-value)")
+ax.set_title("Enricr: Cell Marker 2024 (up regulated drivers)")
+
+import matplotlib.patheffects as pe
+xmax = float(x_vals.max())
+for bar, genes_txt in zip(bars, top["Genes_label"]):
+    y = bar.get_y() + bar.get_height()/2
+    w = bar.get_width()
+    if w >= 0.35 * xmax:  # αρκετά μεγάλη μπάρα -> γράψε ΜΕΣΑ
+        ax.text(w - 0.01*xmax, y, genes_txt,
+                ha="right", va="center", fontsize=9, color="white", linespacing=1.1,
+                path_effects=[pe.withStroke(linewidth=2, foreground="black")])
+    else:                 # μικρή μπάρα -> γράψε ΕΞΩ δεξιά
+        ax.text(w + 0.01*xmax, y, genes_txt,
+                ha="left", va="center", fontsize=7, color="black", linespacing=1.1)
+
+sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm); sm.set_array([])
+cb = fig.colorbar(sm, ax=ax, pad=0.012)
+cb.set_label("-log10(Adjusted p-value)")
+
+plt.tight_layout()
+plt.savefig("/content/enrichment_barplot.png", dpi=300)
+plt.show()
+
+print("Αποθηκεύτηκε: /content/enrichment_barplot.png")
+
+
+
+
+## Cell Marker 2024 down regulated drivers
+
+df = pd.read_csv(io.BytesIO(uploaded[fname]), sep="\t")
+
+num_cols = ["P-value","Adjusted P-value","Old P-value","Old Adjusted P-value","Odds Ratio","Combined Score"]
+for c in num_cols:
+    if c in df.columns:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
+import re, textwrap
+def genes_to_label(s, max_genes=8, wrap=28):
+    """Παίρνει string από τη στήλη Genes και επιστρέφει multiline label.
+       max_genes: πόσα πρώτα γονίδια να δείχνει (None = όλα)
+       wrap: πόσοι χαρακτήρες ανά γραμμή περίπου
+    """
+    if pd.isna(s):
+        return ""
+    genes = [t.strip() for t in re.split(r"[;,]\s*", str(s)) if t.strip()]
+    if max_genes is not None:
+        genes = genes[:max_genes]
+    txt = ", ".join(genes)
+    return textwrap.fill(txt, width=wrap)
+
+p_adj = df["Adjusted P-value"].replace(0, np.finfo(float).tiny)
+df["minus_log10_adjP"] = -np.log10(p_adj)
+
+N = 10
+top = df.sort_values(["Adjusted P-value", "Combined Score"], ascending=[True, False]).head(N).copy()
+top["Genes_label"] = top["Genes"].apply(lambda s: genes_to_label(s, max_genes=8, wrap=26))
+
+cmap = plt.cm.viridis
+norm = plt.Normalize(vmin=top["minus_log10_adjP"].min(), vmax=top["minus_log10_adjP"].max())
+colors = cmap(norm(top["minus_log10_adjP"]))
+
+fig, ax = plt.subplots(figsize=(12, max(6, 0.55*N)))
+
+x_vals = top["minus_log10_adjP"]
+bars = ax.barh(top["Term"], x_vals, color=colors)
+
+ax.invert_yaxis()
+ax.set_xlabel("-log10(Adjusted P-value)")
+ax.set_title("Enricr: Cell Marker 2024 (down regulated drivers)")
+
+import matplotlib.patheffects as pe
+xmax = float(x_vals.max())
+for bar, genes_txt in zip(bars, top["Genes_label"]):
+    y = bar.get_y() + bar.get_height()/2
+    w = bar.get_width()
+    if w >= 0.15 * xmax:  # αρκετά μεγάλη μπάρα -> γράψε ΜΕΣΑ
+        ax.text(w - 0.01*xmax, y, genes_txt,
+                ha="right", va="center", fontsize=9, color="white", linespacing=1.1,
+                path_effects=[pe.withStroke(linewidth=2, foreground="black")])
+
+
+sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm); sm.set_array([])
+cb = fig.colorbar(sm, ax=ax, pad=0.012)
+cb.set_label("-log10(Adjusted p-value)")
+
+plt.tight_layout()
+plt.savefig("/content/enrichment_barplot.png", dpi=300)
+plt.show()
+
+print("Αποθηκεύτηκε: /content/enrichment_barplot.png")
+
+
+
+
+## Reactome Pathways 2024 up regulated drivers
+
+df = pd.read_csv(io.BytesIO(uploaded[fname]), sep="\t")
+
+num_cols = ["P-value","Adjusted P-value","Old P-value","Old Adjusted P-value","Odds Ratio","Combined Score"]
+for c in num_cols:
+    if c in df.columns:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
+import re, textwrap
+def genes_to_label(s, max_genes=8, wrap=28):
+    """Παίρνει string από τη στήλη Genes και επιστρέφει multiline label.
+       max_genes: πόσα πρώτα γονίδια να δείχνει (None = όλα)
+       wrap: πόσοι χαρακτήρες ανά γραμμή περίπου
+    """
+    if pd.isna(s):
+        return ""
+    genes = [t.strip() for t in re.split(r"[;,]\s*", str(s)) if t.strip()]
+    if max_genes is not None:
+        genes = genes[:max_genes]
+    txt = ", ".join(genes)
+    return textwrap.fill(txt, width=wrap)
+
+p_adj = df["Adjusted P-value"].replace(0, np.finfo(float).tiny)
+df["minus_log10_adjP"] = -np.log10(p_adj)
+
+N = 10
+top = df.sort_values(["Adjusted P-value", "Combined Score"], ascending=[True, False]).head(N).copy()
+top["Genes_label"] = top["Genes"].apply(lambda s: genes_to_label(s, max_genes=8, wrap=26))
+
+cmap = plt.cm.viridis
+norm = plt.Normalize(vmin=top["minus_log10_adjP"].min(), vmax=top["minus_log10_adjP"].max())
+colors = cmap(norm(top["minus_log10_adjP"]))
+
+fig, ax = plt.subplots(figsize=(12, max(6, 0.55*N)))
+
+x_vals = top["minus_log10_adjP"]
+bars = ax.barh(top["Term"], x_vals, color=colors)
+
+ax.invert_yaxis()
+ax.set_xlabel("-log10(Adjusted P-value)")
+ax.set_title("Enricr: Reactome Pathways 2024 (up regulated drivers)")
+
+import matplotlib.patheffects as pe
+xmax = float(x_vals.max())
+for bar, genes_txt in zip(bars, top["Genes_label"]):
+    y = bar.get_y() + bar.get_height()/2
+    w = bar.get_width()
+    if w >= 0.15 * xmax:  # αρκετά μεγάλη μπάρα -> γράψε ΜΕΣΑ
+        ax.text(w - 0.01*xmax, y, genes_txt,
+                ha="right", va="center", fontsize=9, color="white", linespacing=1.1,
+                path_effects=[pe.withStroke(linewidth=2, foreground="black")])
+
+
+sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm); sm.set_array([])
+cb = fig.colorbar(sm, ax=ax, pad=0.012)
+cb.set_label("-log10(Adjusted p-value)")
+
+plt.tight_layout()
+plt.savefig("/content/enrichment_barplot.png", dpi=300)
+plt.show()
+
+print("Αποθηκεύτηκε: /content/enrichment_barplot.png")
+
+
+
+
+## Reactome Pathways 2024 down regulated drivers
+
+df = pd.read_csv(io.BytesIO(uploaded[fname]), sep="\t")
+
+num_cols = ["P-value","Adjusted P-value","Old P-value","Old Adjusted P-value","Odds Ratio","Combined Score"]
+for c in num_cols:
+    if c in df.columns:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
+import re, textwrap
+def genes_to_label(s, max_genes=8, wrap=28):
+    """Παίρνει string από τη στήλη Genes και επιστρέφει multiline label.
+       max_genes: πόσα πρώτα γονίδια να δείχνει (None = όλα)
+       wrap: πόσοι χαρακτήρες ανά γραμμή περίπου
+    """
+    if pd.isna(s):
+        return ""
+    genes = [t.strip() for t in re.split(r"[;,]\s*", str(s)) if t.strip()]
+    if max_genes is not None:
+        genes = genes[:max_genes]
+    txt = ", ".join(genes)
+    return textwrap.fill(txt, width=wrap)
+
+p_adj = df["Adjusted P-value"].replace(0, np.finfo(float).tiny)
+df["minus_log10_adjP"] = -np.log10(p_adj)
+
+N = 10
+top = df.sort_values(["Adjusted P-value", "Combined Score"], ascending=[True, False]).head(N).copy()
+top["Genes_label"] = top["Genes"].apply(lambda s: genes_to_label(s, max_genes=8, wrap=26))
+
+cmap = plt.cm.viridis
+norm = plt.Normalize(vmin=top["minus_log10_adjP"].min(), vmax=top["minus_log10_adjP"].max())
+colors = cmap(norm(top["minus_log10_adjP"]))
+
+fig, ax = plt.subplots(figsize=(12, max(6, 0.55*N)))
+
+x_vals = top["minus_log10_adjP"]
+bars = ax.barh(top["Term"], x_vals, color=colors)
+
+ax.invert_yaxis()
+ax.set_xlabel("-log10(Adjusted P-value)")
+ax.set_title("Enricr: Reactome Pathways 2024 (down regulated drivers)")
+
+import matplotlib.patheffects as pe
+xmax = float(x_vals.max())
+for bar, genes_txt in zip(bars, top["Genes_label"]):
+    y = bar.get_y() + bar.get_height()/2
+    w = bar.get_width()
+    if w >= 0.15 * xmax:  # αρκετά μεγάλη μπάρα -> γράψε ΜΕΣΑ
+        ax.text(w - 0.01*xmax, y, genes_txt,
+                ha="right", va="center", fontsize=9, color="white", linespacing=1.1,
+                path_effects=[pe.withStroke(linewidth=2, foreground="black")])
+
+
+sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm); sm.set_array([])
+cb = fig.colorbar(sm, ax=ax, pad=0.012)
+cb.set_label("-log10(Adjusted p-value)")
+
+plt.tight_layout()
+plt.savefig("/content/enrichment_barplot.png", dpi=300)
+plt.show()
+
+print("Αποθηκεύτηκε: /content/enrichment_barplot.png")

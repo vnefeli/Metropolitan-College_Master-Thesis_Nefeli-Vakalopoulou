@@ -1,0 +1,73 @@
+# Load required libraries
+library(Matrix)
+library(Biobase)
+
+rm(list = ls())
+
+# Function to read a 10x sample
+read_10x_sample <- function(prefix_path, sample_id) {
+  barcode_file <- paste0(prefix_path, ".barcodes.tsv.gz")
+  gene_file    <- paste0(prefix_path, ".genes.tsv.gz")
+  matrix_file  <- paste0(prefix_path, ".matrix.mtx.gz")
+  
+  barcodes <- read.delim(gzfile(barcode_file), header = FALSE, stringsAsFactors = FALSE)[[1]]
+  genes <- read.delim(gzfile(gene_file), header = FALSE, stringsAsFactors = FALSE)
+  mat <- readMM(gzfile(matrix_file))
+  
+## Assign unique cell and gene identifiers
+  colnames(mat) <- paste(barcodes, sample_id, sep = "_")
+  rownames(mat) <- make.unique(genes$V2)
+  
+  list(matrix = mat)
+}
+
+# Function to extract condition from sample name
+get_condition <- function(sample_id) {
+  if (grepl("Norm", sample_id)) return("Normal")
+  if (grepl("Cancer", sample_id)) return("Cancer")
+  "Unknown"
+}
+
+# Define the directory containing data
+data_dir <- "C:/Users/vasileioubill95/Desktop/New folder"
+
+# Identify sample prefixes
+matrix_files <- list.files(data_dir, pattern = "matrix.mtx.gz", full.names = TRUE)
+sample_prefixes <- sub("\\.matrix\\.mtx\\.gz$", "", matrix_files)
+sample_ids <- basename(sample_prefixes)
+
+# Initialize containers
+combined_matrix <- NULL
+cell_metadata <- data.frame()
+
+# Read and combine all samples
+for (i in seq_along(sample_prefixes)) {
+  sample_id <- sample_ids[i]
+  message("Processing: ", sample_id)
+  
+  sample_data <- read_10x_sample(sample_prefixes[i], sample_id)
+  mat <- sample_data$matrix
+  cells <- colnames(mat)
+  
+## Build metadata
+  meta <- data.frame(
+    cell_id = cells,
+    sample_id = sample_id,
+    condition = get_condition(sample_id),
+    row.names = cells,
+    stringsAsFactors = FALSE
+  )
+  cell_metadata <- rbind(cell_metadata, meta)
+  
+## Combine matrices
+  combined_matrix <- if (is.null(combined_matrix)) mat else cbind(combined_matrix, mat)
+}
+
+# Create ExpressionSet
+pd <- AnnotatedDataFrame(cell_metadata)
+eset <- ExpressionSet(assayData = combined_matrix, phenoData = pd)
+
+
+eset <- createSparseEset(input_matrix =combined_matrix, cellData = cell_metadata, featureData =  NULL, projectID = "OVARY", addMetaData = TRUE)
+
+saveRDS(eset, file = "../ovary_eset_cancer.rds")

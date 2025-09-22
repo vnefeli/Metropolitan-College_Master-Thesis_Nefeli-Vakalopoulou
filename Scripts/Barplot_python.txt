@@ -1,0 +1,75 @@
+# Upload data
+from google.colab import files
+uploaded = files.upload()
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+df = pd.read_csv("/content/da_res2.csv")
+
+
+df["log2FC"] = pd.to_numeric(df["log2FC"], errors="coerce")
+if "FDR" in df.columns:
+    df["FDR"] = pd.to_numeric(df["FDR"], errors="coerce")
+
+
+if "cell_type" in df.columns:
+    df = df[df["cell_type"].str.strip().str.lower() == "t cells"]
+
+
+if "g1_tag" in df.columns:
+    mask_cancer = df["g1_tag"].str.strip().str.lower() == "cancer"
+    df = df[mask_cancer].copy()
+
+if "FDR" in df.columns and df["FDR"].notna().any():
+    sig = df["FDR"] < 0.05
+else:
+    sig = pd.Series(True, index=df.index)
+
+up = df[(df["log2FC"] > 0) & sig].sort_values("log2FC", ascending=False).head(10)
+down = df[(df["log2FC"] < 0) & sig].sort_values("log2FC", ascending=True).head(10)
+
+if len(up) < 10:
+    up_extra = df[df["log2FC"] > 0].sort_values("log2FC", ascending=False).head(10 - len(up))
+    up = pd.concat([up, up_extra]).drop_duplicates(subset=["feature"]).head(10)
+if len(down) < 10:
+    down_extra = df[df["log2FC"] < 0].sort_values("log2FC", ascending=True).head(10 - len(down))
+    down = pd.concat([down, down_extra]).drop_duplicates(subset=["feature"]).head(10)
+
+from matplotlib.patches import Patch
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+mirror = pd.concat([down, up], axis=0)
+mirror = mirror.copy()
+
+max_abs = np.nanmax(np.abs(mirror["log2FC"]))
+norm = plt.Normalize(vmin=-max_abs, vmax=max_abs)
+cmap = plt.cm.get_cmap("coolwarm")  # κόκκινα=up, μπλε=down (ή όποιο diverging θες)
+colors = cmap(norm(mirror["log2FC"]))
+
+plt.figure(figsize=(10, 7))
+bars = plt.barh(mirror["feature"], mirror["log2FC"], color=colors)
+plt.axvline(0, linestyle="--", linewidth=1)
+
+plt.xlabel("log2FC (cancer vs normal)")
+plt.title("Barplot: Top 10 up/down regulated drivers in cancer T cells")
+plt.gca().invert_yaxis()  # ο πιο ακραίος επάνω
+
+sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+sm.set_array([])
+cb = plt.colorbar(sm, pad=0.01)
+cb.set_label("log2FC")
+
+for y, v in enumerate(mirror["log2FC"]):
+    if np.isfinite(v):
+        ha = "left" if v >= 0 else "right"
+        off = 0.02 * max_abs
+        plt.text(v + (off if v >= 0 else -off), y, f"{v:.2f}", va="center", ha=ha, fontsize=8)
+
+plt.tight_layout()
+plt.savefig("/content/bar_top10_mirror_colormap.png", dpi=300)
+plt.show()

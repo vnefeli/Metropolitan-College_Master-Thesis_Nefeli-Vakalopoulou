@@ -1,0 +1,144 @@
+library(tidyverse)
+library(openxlsx)
+library(scMINER)
+library(anndata)
+library(icesTAF)
+library(Seurat)
+library(SingleCellExperiment)
+
+rm(list = ls())
+gc()
+
+# Define Directory
+
+setwd("./")
+
+# Create environment for the project
+
+scminer_dir <- createProjectSpace(project_dir = "./", project_name = "Ovary_project")
+
+# Load Seurat Object
+
+SeuratObject <- readRDS("data/ovary_seurat_cancer_downsampled.rds")
+
+# Convert Seurat Object into SparseEset
+
+meta.data <- SeuratObject@meta.data
+
+feature.data<-data.frame(rownames(SeuratObject@assays$RNA$count))
+colnames(feature.data)<-"geneSymbol"
+rownames(feature.data)<-feature.data$geneSymbol
+
+expression <- SeuratObject@assays$RNA$count
+
+eset <- createSparseEset(input_matrix =expression, cellData = meta.data, featureData =  feature.data, projectID = "Ovary_project", addMetaData = TRUE)
+
+eset_log2cpm <- normalizeSparseEset(eset, scale_factor = 1000000, log_base = 2, log_pseudoCount = 1)
+
+saveRDS(eset_log2cpm, file = "data/ovary_eset_cancer_downsampled.rds")
+
+# Apply MICA for cell clustering
+
+eset <- eset_log2cpm
+
+## Generate MICA input in txt format
+generateMICAinput(input_eset = eset, output_file = "./Ovary_project/MICA/micaInput.txt", overwrite = FALSE)
+
+
+## combine and save
+eset <- addMICAoutput(
+  input_eset = eset,
+  mica_output_file = "./Ovary_project/MICA/clustering_UMAP_euclidean_20_1.822.txt",
+  visual_method = "umap"  
+)
+
+saveRDS(eset, file = "./Ovary_project/DATA/ovary_clustered.eset")
+
+## Visualization of MICA
+MICAplot(input_eset = ovary_clustered.eset, color_by = "clusterID", X = "UMAP_1", Y = "UMAP_2", point.size = 0.1, fontsize.cluster_label = 14)
+
+# Supervised cell type annotation
+
+## Create signature table based on the reference paper, with weight = 1
+
+signature_table <- data.frame(
+  CellType = c(
+    rep("T_cells", 3),
+    rep("Epithelial_cells", 4),
+    rep("Monocytes", 2),
+    rep("Endothelial_cells", 2),
+    rep("CellCycle_cells", 2),
+    rep("Fibroblasts", 2),
+    rep("B_and_Plasma_cells", 2),
+    rep("SmoothMuscle_Myofibroblasts", 3)
+  ),
+  GeneSymbol = c(
+    "CD3D", "CD3E", "CD8A",
+    "KRT18", "EPCAM", "CD24", "KRT19",
+    "CD14", "C1QA",
+    "PECAM1", "CLDN5",
+    "MKI67", "TOP2A",
+    "DCN", "OGN",
+    "CD79A", "JCHAIN",
+    "ACTA2", "MYH11", "TAGLN"
+  ),
+  Weight = 1,
+  stringsAsFactors = FALSE
+)
+
+write.table(signature_table, file = "signature_table_clusters.txt", sep = "\t", row.names = FALSE, quote = FALSE)
+
+draw_bubbleplot(input_eset = eset_log2cpm, signature_table = signature_table, group_by = "clusterID")
+
+
+## combine and save
+
+
+# Create SJARACNe input Objects by taking into consideration:
+    a) transcription factors (TFs) as gene hubs
+    b) Signalling genes (SIGs) as gene hubs
+
+## Columns with any illegal characters can not be used for groupping
+
+eset_annot <- readRDS("Ovary_project/DATA/ovary_annotated.eset")
+eset_Tcells <- eset_annot[, pData(eset_annot)$cell_type == "T cells"]
+
+generateSJARACNeInput(input_eset = eset_Tcells, group_name = "condition", sjaracne_dir = "./Ovary_project/SJARACNe", species_type = "hg", driver_type = "TF_SIG", downSample_N = NULL)
+
+## RUN SJARACNe
+
+### run bash basic Commands with SJARACNe algorithms 
+
+network_format <- read.table("Run/SIAH1/SJARACNe/CTL/TF/bt100_pc001/consensus_network_ncol_.txt",
+                             header = T, sep = "\t", quote = "", stringsAsFactors = F)
+
+
+# Calculate Activity
+
+annotated.eset <- readRDS("../Ovary_project/DATA/ovary_annotated.eset")
+
+activity.eset <- getActivity_inBatch(
+  input_eset         = eset_Tcells,
+  sjaracne_dir       = "../Ovary_project/SJARACNe",
+  group_name         = "condition",
+  driver_type        = "TF_SIG",
+  activity_method    = "mean",
+  do.z_normalization = TRUE
+)
+
+saveRDS(activity.eset, file = "../Ovary_project/DATA/ovary_activity.eset")
+
+
+# Differential Activity Analyses
+
+da_res1 <- getDA(input_eset = activity.eset, group_by = "condition", use_method = "t.test")
+
+top_drivers <- getTopFeatures(input_table = da_res1, number = 10, group_by = "g1_tag", sort_by = "log2FC", sort_decreasing = TRUE)
+
+library(openxlsx)
+
+write.xlsx(
+  top_drivers,
+  file = "C:/Users/Nefeli Vakalopoulou/OneDrive/Υπολογιστής/Master thesis/Ovary_project/top_drivers.xlsx",
+  rowNames = FALSE
+)
